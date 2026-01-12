@@ -1,4 +1,7 @@
-# Quantized KV Cache
+---
+title: Quantized KV Cache
+---
+[](){ #quantized-kvcache }
 
 ## FP8 KV Cache
 
@@ -17,16 +20,6 @@ The E4M3 format offers higher precision compared to E5M2. However, due to its sm
 
 For now, only per-tensor (scalar) scaling factors are supported. Development is ongoing to support scaling factors of a finer granularity (e.g. per-channel).
 
-### How FP8 KV Cache Works
-
-The FP8 KV cache implementation follows this workflow:
-
-1. **Storage**: Key and Value tensors are quantized to FP8 format using scaling factors before being stored in the KV cache
-2. **Retrieval**: When needed for attention computation, cached KV tensors are dequantized back to higher precision (FP16/BF16)
-3. **Attention**: The attention-value multiplication (softmax output × V) is performed using the dequantized higher-precision V tensor
-
-This means the final attention computation operates on dequantized values, not FP8 tensors. The quantization reduces memory usage during storage but maintains computation accuracy by using higher precision during the actual attention operations.
-
 ### Performance Impact
 
 The current FP8 KV cache implementation primarily benefits throughput by allowing approximately double the amount of space for KV cache allocation. This enables either:
@@ -42,7 +35,7 @@ Studies have shown that FP8 E4M3 quantization typically only minimally degrades 
 
 Here is an example of how to enable FP8 quantization:
 
-??? code
+??? Code
 
     ```python
     # To calculate kv cache scales on the fly enable the calculate_kv_scales
@@ -51,18 +44,15 @@ Here is an example of how to enable FP8 quantization:
     from vllm import LLM, SamplingParams
 
     sampling_params = SamplingParams(temperature=0.7, top_p=0.8)
-    llm = LLM(
-        model="meta-llama/Llama-2-7b-chat-hf",
-        kv_cache_dtype="fp8",
-        calculate_kv_scales=True,
-    )
+    llm = LLM(model="meta-llama/Llama-2-7b-chat-hf",
+            kv_cache_dtype="fp8",
+            calculate_kv_scales=True)
     prompt = "London is the capital of"
     out = llm.generate(prompt, sampling_params)[0].outputs[0].text
     print(out)
     ```
 
 The `kv_cache_dtype` argument specifies the data type for KV cache storage:
-
 - `"auto"`: Uses the model's default "unquantized" data type
 - `"fp8"` or `"fp8_e4m3"`: Supported on CUDA 11.8+ and ROCm (AMD GPU)
 - `"fp8_e5m2"`: Supported on CUDA 11.8+
@@ -83,16 +73,16 @@ pip install llmcompressor
 
 Here's a complete example using `meta-llama/Llama-3.1-8B-Instruct` (most models can use this same pattern):
 
-??? code
+??? Code
 
     ```python
     from datasets import load_dataset
     from transformers import AutoModelForCausalLM, AutoTokenizer
-    from llmcompressor import oneshot
+    from llmcompressor.transformers import oneshot
 
     # Select model and load it
     MODEL_ID = "meta-llama/Llama-3.1-8B-Instruct"
-    model = AutoModelForCausalLM.from_pretrained(MODEL_ID, device_map="auto", dtype="auto")
+    model = AutoModelForCausalLM.from_pretrained(MODEL_ID, device_map="auto", torch_dtype="auto")
     tokenizer = AutoTokenizer.from_pretrained(MODEL_ID)
 
     # Select calibration dataset

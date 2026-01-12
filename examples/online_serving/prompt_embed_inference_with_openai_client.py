@@ -10,7 +10,7 @@ This script demonstrates how to:
 
 Run the vLLM server first:
 vllm serve meta-llama/Llama-3.2-1B-Instruct \
-  --runner generate \
+  --task generate \
   --max-model-len 4096 \
   --enable-prompt-embeds
 
@@ -28,10 +28,12 @@ Dependencies:
 - openai
 """
 
+import base64
+import io
+
+import torch
 import transformers
 from openai import OpenAI
-
-from vllm.utils.serial_utils import tensor2base64
 
 
 def main():
@@ -56,7 +58,11 @@ def main():
     prompt_embeds = embedding_layer(token_ids).squeeze(0)
 
     # Prompt embeddings
-    encoded_embeds = tensor2base64(prompt_embeds)
+    buffer = io.BytesIO()
+    torch.save(prompt_embeds, buffer)
+    buffer.seek(0)
+    binary_data = buffer.read()
+    encoded_embeds = base64.b64encode(binary_data).decode("utf-8")
 
     completion = client.completions.create(
         model=model_name,

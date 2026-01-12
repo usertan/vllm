@@ -1,5 +1,8 @@
-# KServe
+---
+title: KServe
+---
+[](){ #deployment-kserve }
 
 vLLM can be deployed with [KServe](https://github.com/kserve/kserve) on Kubernetes for highly scalable distributed model serving.
 
-You can use vLLM with KServe's [Hugging Face serving runtime](https://kserve.github.io/website/docs/model-serving/generative-inference/overview) or via [`LLMInferenceService` that uses llm-d](https://kserve.github.io/website/docs/model-serving/generative-inference/llmisvc/llmisvc-overview).
+Please see [this guide](https://kserve.github.io/website/latest/modelserving/v1beta1/llm/huggingface/) for more details on using vLLM with KServe.

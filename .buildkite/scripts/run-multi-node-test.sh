@@ -2,17 +2,6 @@
 
 set -euox pipefail
 
-# To detect ROCm
-# Check multiple indicators:
-if [ -e /dev/kfd ] || \
-    [ -d /opt/rocm ] || \
-    command -v rocm-smi &> /dev/null || \
-    [ -n "${ROCM_HOME:-}" ]; then
-    IS_ROCM=1
-else
-    IS_ROCM=0
-fi
-
 if [[ $# -lt 4 ]]; then
     echo "Usage: .buildkite/scripts/run-multi-node-test.sh WORKING_DIR NUM_NODES NUM_GPUS DOCKER_IMAGE COMMAND1 COMMAND2 ... COMMANDN"
     exit 1
@@ -37,18 +26,13 @@ for command in "${COMMANDS[@]}"; do
     echo "$command"
 done
 
-
 start_network() {
     docker network create --subnet=192.168.10.0/24 docker-net
 }
 
 start_nodes() {
     for node in $(seq 0 $(($NUM_NODES-1))); do
-        if [ "$IS_ROCM" -eq 1 ]; then
-            GPU_DEVICES='--device /dev/kfd --device /dev/dri -e HIP_VISIBLE_DEVICES='
-        else
-            GPU_DEVICES='--gpus "device='
-        fi
+        GPU_DEVICES='"device='
         for node_gpu in $(seq 0 $(($NUM_GPUS - 1))); do
             DEVICE_NUM=$(($node * $NUM_GPUS + $node_gpu))
             GPU_DEVICES+=$(($DEVICE_NUM))
@@ -56,9 +40,7 @@ start_nodes() {
                 GPU_DEVICES+=','
             fi
         done
-        if [ "$IS_ROCM" -eq 0 ]; then
-            GPU_DEVICES+='"'
-        fi
+        GPU_DEVICES+='"'
 
         # start the container in detached mode
         # things to note:
@@ -67,7 +49,7 @@ start_nodes() {
         # 3. map the huggingface cache directory to the container
         # 3. assign ip addresses to the containers (head node: 192.168.10.10, worker nodes:
         #    starting from 192.168.10.11)
-        docker run -d $GPU_DEVICES --shm-size=10.24gb -e HF_TOKEN \
+        docker run -d --gpus "$GPU_DEVICES" --shm-size=10.24gb -e HF_TOKEN \
             -v ~/.cache/huggingface:/root/.cache/huggingface --name "node$node" \
             --network docker-net --ip 192.168.10.$((10 + $node)) --rm "$DOCKER_IMAGE" \
             /bin/bash -c "tail -f /dev/null"

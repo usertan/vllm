@@ -4,10 +4,7 @@
 from argparse import Namespace
 
 from vllm import LLM, EngineArgs
-from vllm.config import AttentionConfig
-from vllm.platforms import current_platform
-from vllm.utils.argparse_utils import FlexibleArgumentParser
-from vllm.v1.attention.backends.registry import AttentionBackendEnum
+from vllm.utils import FlexibleArgumentParser
 
 
 def parse_args():
@@ -15,19 +12,15 @@ def parse_args():
     parser = EngineArgs.add_cli_args(parser)
     # Set example specific arguments
     parser.set_defaults(
-        model="intfloat/e5-small",
-        runner="pooling",
+        model="intfloat/e5-mistral-7b-instruct",
+        task="embed",
         enforce_eager=True,
+        max_model_len=1024,
     )
     return parser.parse_args()
 
 
 def main(args: Namespace):
-    if current_platform.is_rocm():
-        args.attention_config = AttentionConfig(
-            backend=AttentionBackendEnum.FLEX_ATTENTION
-        )
-
     # Sample prompts.
     prompts = [
         "Hello, my name is",
@@ -37,11 +30,11 @@ def main(args: Namespace):
     ]
 
     # Create an LLM.
-    # You should pass runner="pooling" for embedding models
-    llm = LLM(**vars(args))
+    # You should pass task="embed" for embedding models
+    model = LLM(**vars(args))
 
     # Generate embedding. The output is a list of EmbeddingRequestOutputs.
-    outputs = llm.embed(prompts)
+    outputs = model.embed(prompts)
 
     # Print the outputs.
     print("\nGenerated Outputs:\n" + "-" * 60)

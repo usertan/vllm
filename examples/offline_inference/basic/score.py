@@ -4,10 +4,7 @@
 from argparse import Namespace
 
 from vllm import LLM, EngineArgs
-from vllm.config import AttentionConfig
-from vllm.platforms import current_platform
-from vllm.utils.argparse_utils import FlexibleArgumentParser
-from vllm.v1.attention.backends.registry import AttentionBackendEnum
+from vllm.utils import FlexibleArgumentParser
 
 
 def parse_args():
@@ -15,19 +12,12 @@ def parse_args():
     parser = EngineArgs.add_cli_args(parser)
     # Set example specific arguments
     parser.set_defaults(
-        model="BAAI/bge-reranker-v2-m3",
-        runner="pooling",
-        enforce_eager=True,
+        model="BAAI/bge-reranker-v2-m3", task="score", enforce_eager=True
     )
     return parser.parse_args()
 
 
 def main(args: Namespace):
-    if current_platform.is_rocm():
-        args.attention_config = AttentionConfig(
-            backend=AttentionBackendEnum.FLEX_ATTENTION
-        )
-
     # Sample prompts.
     text_1 = "What is the capital of France?"
     texts_2 = [
@@ -36,11 +26,11 @@ def main(args: Namespace):
     ]
 
     # Create an LLM.
-    # You should pass runner="pooling" for cross-encoder models
-    llm = LLM(**vars(args))
+    # You should pass task="score" for cross-encoder models
+    model = LLM(**vars(args))
 
     # Generate scores. The output is a list of ScoringRequestOutputs.
-    outputs = llm.score(text_1, texts_2)
+    outputs = model.score(text_1, texts_2)
 
     # Print the outputs.
     print("\nGenerated Outputs:\n" + "-" * 60)

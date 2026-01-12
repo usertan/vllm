@@ -4,7 +4,7 @@ vLLM exposes a number of metrics that can be used to monitor the health of the
 system. These metrics are exposed via the `/metrics` endpoint on the vLLM
 OpenAI compatible API server.
 
-You can start the server using Python, or using [Docker](../deployment/docker.md):
+You can start the server using Python, or using [Docker][deployment-docker]:
 
 ```bash
 vllm serve unsloth/Llama-3.2-1B-Instruct
@@ -12,7 +12,7 @@ vllm serve unsloth/Llama-3.2-1B-Instruct
 
 Then query the endpoint to get the latest metrics from the server:
 
-??? console "Output"
+??? Output
 
     ```console
     $ curl http://0.0.0.0:8000/metrics
@@ -33,19 +33,11 @@ Then query the endpoint to get the latest metrics from the server:
 
 The following metrics are exposed:
 
-## General Metrics
+??? Code
 
---8<-- "docs/generated/metrics/general.inc.md"
-
-## Speculative Decoding Metrics
-
---8<-- "docs/generated/metrics/spec_decode.inc.md"
-
-## NIXL KV Connector Metrics
-
---8<-- "docs/generated/metrics/nixl_connector.inc.md"
-
-## Deprecation Policy
+    ```python
+    --8<-- "vllm/engine/metrics.py:metrics-definitions"
+    ```
 
 Note: when metrics are deprecated in version `X.Y`, they are hidden in version `X.Y+1`
 but can be re-enabled using the `--show-hidden-metrics-for-version=X.Y` escape hatch,

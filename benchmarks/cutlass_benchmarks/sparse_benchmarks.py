@@ -6,7 +6,8 @@ import copy
 import itertools
 import pickle as pkl
 import time
-from collections.abc import Callable, Iterable
+from collections.abc import Iterable
+from typing import Callable
 
 import torch
 import torch.utils.benchmark as TBenchmark
@@ -15,7 +16,7 @@ from utils import make_rand_sparse_tensors
 from weight_shapes import WEIGHT_SHAPES
 
 from vllm import _custom_ops as ops
-from vllm.utils.argparse_utils import FlexibleArgumentParser
+from vllm.utils import FlexibleArgumentParser
 
 DEFAULT_MODELS = list(WEIGHT_SHAPES.keys())
 DEFAULT_BATCH_SIZES = [1, 16, 32, 64, 128, 256, 512]
@@ -343,9 +344,7 @@ def bench(
         return bench_int8(dtype, m, k, n, label, sub_label)
     if dtype == torch.float8_e4m3fn:
         return bench_fp8(dtype, m, k, n, label, sub_label)
-    raise ValueError(
-        f"Unsupported dtype {dtype}: should be one of torch.int8, torch.float8_e4m3fn."
-    )
+    raise ValueError("unsupported type")
 
 
 # runner

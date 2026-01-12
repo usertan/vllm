@@ -4,21 +4,20 @@ from contextlib import contextmanager
 from typing import Any
 
 import torch
-import torch.nn as nn
 
 from vllm.config import VllmConfig
 from vllm.logger import init_logger
 from vllm.model_executor.model_loader import get_model
-from vllm.v1.utils import CpuGpuBuffer
+from vllm.model_executor.models.interfaces import has_step_pooler
 from vllm.v1.worker.gpu_model_runner import GPUModelRunner
 
 logger = init_logger(__name__)
 
 
 class CPUModelRunner(GPUModelRunner):
+
     def __init__(self, vllm_config: VllmConfig, device: torch.device):
-        with _torch_cuda_wrapper():
-            super().__init__(vllm_config, device)
+        super().__init__(vllm_config, device)
 
         assert device == torch.device("cpu")
         assert self.speculative_config is None, "spec decode is not supported."
@@ -26,11 +25,12 @@ class CPUModelRunner(GPUModelRunner):
         self.use_cuda_graph = False
         self.cascade_attn_enabled = False
 
-        self._postprocess_tensors()
+        self._postprocess_tenosrs()
 
-    def _postprocess_tensors(self) -> None:
+    def _postprocess_tenosrs(self) -> None:
         # Note: replace device tensors with cpu tensors
-        def replace_tensor(obj: Any, cpu_attr_name: str, device_attr_name) -> None:
+        def replace_tensor(obj: Any, cpu_attr_name: str,
+                           device_attr_name) -> None:
             cpu_tensor = getattr(obj, cpu_attr_name, None)
             device_tensor = getattr(obj, device_attr_name, None)
             if cpu_tensor is not None and device_tensor is not None:
@@ -38,40 +38,35 @@ class CPUModelRunner(GPUModelRunner):
                 assert isinstance(device_tensor, torch.Tensor)
                 setattr(obj, device_attr_name, cpu_tensor)
 
-        for v in vars(self).values():
-            if isinstance(v, CpuGpuBuffer):
-                v.gpu = v.cpu
+        for k, v in vars(self).items():
+            if k.endswith("_cpu") and isinstance(v, torch.Tensor):
+                replace_tensor(self, k, k[:-4])
 
         for k, v in vars(self.input_batch).items():
             if k.endswith("_cpu_tensor") and isinstance(v, torch.Tensor):
                 replace_tensor(self.input_batch, k, k[:-11])
 
-        for block_table in self.input_batch.block_table.block_tables:
-            for v in vars(block_table).values():
-                if isinstance(v, CpuGpuBuffer):
-                    v.gpu = v.cpu
+        for k, v in vars(self.input_batch.block_table).items():
+            if k.endswith("_cpu") and isinstance(v, torch.Tensor):
+                replace_tensor(self.input_batch.block_table, k, k[:-4])
 
-    def load_model(self, eep_scale_up: bool = False) -> None:
+    def load_model(self) -> None:
         logger.info("Starting to load model %s...", self.model_config.model)
         self.model = get_model(vllm_config=self.vllm_config)
 
-        if self.lora_config:
-            self.model = self.load_lora_model(self.model, self.vllm_config, self.device)
+        if has_step_pooler(self.model):
+            self.input_batch.logits_processing_needs_token_ids = True
 
-    def get_model(self) -> nn.Module:
-        return self.model
+        if self.lora_config:
+            self.model = self.load_lora_model(self.model, self.model_config,
+                                              self.scheduler_config,
+                                              self.lora_config, self.device)
 
     def warming_up_model(self) -> None:
         logger.info("Warming up model for the compilation...")
         # Only generate graph for the generic shape
         with _set_global_compilation_settings(self.vllm_config):
-            self._dummy_run(
-                min(
-                    max(16, self.max_num_reqs),
-                    self.scheduler_config.max_num_batched_tokens,
-                )
-            )
-
+            self._dummy_run(max(16, self.max_num_reqs))
         logger.info("Warming up done.")
 
     def _init_device_properties(self) -> None:
@@ -80,43 +75,17 @@ class CPUModelRunner(GPUModelRunner):
     def _sync_device(self) -> None:
         pass
 
-    def get_dp_padding(self, num_tokens: int) -> tuple[int, torch.Tensor | None]:
-        # Note: For CPU backend, dp padding is not required for now.
-        return 0, None
-
-
-@contextmanager
-def _torch_cuda_wrapper():
-    class _EventPlaceholder:
-        def __init__(self, *args, **kwargs) -> None:
-            self.record = lambda: None
-            self.synchronize = lambda: None
-
-    class _StreamPlaceholder:
-        def __init__(self, *args, **kwargs) -> None:
-            pass
-
-    cuda_event = torch.Event
-    cuda_stream = torch.cuda.Stream
-    try:
-        torch.Event = _EventPlaceholder
-        torch.cuda.Stream = _StreamPlaceholder
-        yield
-    finally:
-        torch.Event = cuda_event
-        torch.cuda.Stream = cuda_stream
-
 
 @contextmanager
 def _set_global_compilation_settings(config: VllmConfig):
-    import torch._inductor.config as torch_inductor_config
+    import torch._inductor.config
 
     inductor_config = config.compilation_config.inductor_compile_config
-    # Note: The MKLDNN and CPPGEMM backend requires freezing parameters.
-    freezing_value = torch_inductor_config.freezing
     try:
+        # Note: The MKLDNN and CPPGEMM backend requires freezing parameters.
+        freezing_value = torch._inductor.config.freezing
         if inductor_config.get("max_autotune", False):
-            torch_inductor_config.freezing = True
+            torch._inductor.config.freezing = True
         yield
     finally:
-        torch_inductor_config.freezing = freezing_value
+        torch._inductor.config.freezing = freezing_value

@@ -2,14 +2,14 @@
 # SPDX-FileCopyrightText: Copyright contributors to the vLLM project
 """
 This script demonstrates how to extend the context length
-of a Qwen model using the YARN method (rope_parameters)
+of a Qwen model using the YARN method (rope_scaling)
 and run a simple chat example.
 
 Usage:
     python examples/offline_inference/context_extension.py
 """
 
-from vllm import LLM, RequestOutput, SamplingParams
+from vllm import LLM, SamplingParams
 
 
 def create_llm():
@@ -19,8 +19,8 @@ def create_llm():
 
     # Use yarn to extend context
     hf_overrides = {
-        "rope_parameters": {
-            "rope_theta": rope_theta,
+        "rope_theta": rope_theta,
+        "rope_scaling": {
             "rope_type": "yarn",
             "factor": factor,
             "original_max_position_embeddings": original_max_position_embeddings,
@@ -45,15 +45,13 @@ def run_llm_chat(llm):
         {"role": "assistant", "content": "Hello! How can I assist you today?"},
     ]
     outputs = llm.chat(conversation, sampling_params, use_tqdm=False)
-    return outputs, [
-        conversation,
-    ]
+    return outputs
 
 
-def print_outputs(outputs: list[RequestOutput], conversations: list):
+def print_outputs(outputs):
     print("\nGenerated Outputs:\n" + "-" * 80)
-    for i, output in enumerate(outputs):
-        prompt = conversations[i]
+    for output in outputs:
+        prompt = output.prompt
         generated_text = output.outputs[0].text
         print(f"Prompt: {prompt!r}\n")
         print(f"Generated text: {generated_text!r}")
@@ -62,8 +60,8 @@ def print_outputs(outputs: list[RequestOutput], conversations: list):
 
 def main():
     llm = create_llm()
-    outputs, conversations = run_llm_chat(llm)
-    print_outputs(outputs, conversations)
+    outputs = run_llm_chat(llm)
+    print_outputs(outputs)
 
 
 if __name__ == "__main__":
